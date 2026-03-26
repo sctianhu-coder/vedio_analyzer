@@ -14,7 +14,7 @@ from typing import Dict
 import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse 
 from fastapi.staticfiles import StaticFiles  # 添加这一行
 
 # 工具导入
