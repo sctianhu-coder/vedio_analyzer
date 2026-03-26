@@ -1,6 +1,6 @@
 **使用示例:
   # 基础分析
-  python app.py -i video/running.mp4
+  python app.py -i video/running.mp4 --ffmpeg-path /opt/homebrew/bin/ffmpeg
 
   # 禁用音频分析
   python app.py -i video/running.mp4 --no-audio

@@ -1,183 +1,145 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-视频分析系统 - FastAPI 接口版
-部署到 PythonAnywhere / 云端
-接口：/analyze_video
-支持：异步任务 + 任务ID查询
+视频分析系统 - 阿里云轻量服务器 + 简易日志追踪版
 """
 
 import os
-import json
 import time
 import uuid
-import asyncio
-from datetime import datetime
-from typing import Dict, Optional, Any
 import threading
+from datetime import datetime
+from typing import Dict
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 
-# 导入你的工具函数
-from tools import convert_to_serializable, ensure_dir, format_duration
+# 工具导入
+from tools import ensure_dir, format_duration
 
-# 导入分析模块
+# 分析模块
 from video_smoothness import VideoSmoothnessAnalyzer
 from gait_face_analyzer import GaitFaceAnalyzer
-from audio_analyzer import AudioAnalyzer, AudioAnalyzerSimple
+from audio_analyzer import AudioAnalyzerSimple
 from sensitive_info_detector import SensitiveInfoDetector, PrivacyBlur
 
-# ==============================================
-# 全局配置（云端必须关闭打印、禁用GUI）
-# ==============================================
-os.environ["OPENCV_VIDEOIO_DEBUG"] = "0"
-os.environ["OPENCV_LOG_LEVEL"] = "ERROR"
-cv2.setLogLevel(0)
-
-# 全局任务存储（云端简易版，正式用Redis）
+# 全局任务
 TASKS = {}
+app = FastAPI(title="视频分析API", version="simple-log")
 
-# FastAPI 应用
-app = FastAPI(title="视频步态+人脸分析API", version="2.0")
+# ====================== 简单日志工具 ======================
+def log(task_id, msg):
+    """统一日志格式：时间 + 任务ID + 信息"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{now}] [任务:{task_id}] {msg}")
 
-# 全局分析器实例
-analyzer_app = VideoAnalysisApp(
-    enable_audio=True,
-    use_advanced_asr=False,
-    enable_sensitive=True
-)
-
-# ==============================================
-# 核心：视频分析类（保持你原有逻辑不变）
-# ==============================================
+# ====================== 视频分析类 ======================
 class VideoAnalysisApp:
-    def __init__(self, enable_audio: bool = True, use_advanced_asr: bool = False,
-                 enable_sensitive: bool = True, ffmpeg_path: str = None):
+    def __init__(self):
         self.smoothness_analyzer = VideoSmoothnessAnalyzer()
         self.gait_face_analyzer = GaitFaceAnalyzer()
-        self.audio_analyzer = None
-        if enable_audio:
-            self.audio_analyzer = AudioAnalyzerSimple(ffmpeg_path=ffmpeg_path)
-        self.sensitive_detector = SensitiveInfoDetector() if enable_sensitive else None
-        self.privacy_blur = PrivacyBlur() if enable_sensitive else None
+        self.audio_analyzer = AudioAnalyzerSimple(ffmpeg_path="/usr/local/bin/ffmpeg")
+        self.sensitive_detector = SensitiveInfoDetector()
 
-    def reset(self):
-        self.smoothness_analyzer.reset()
-        self.gait_face_analyzer.reset()
-
-    def analyze_video(self, video_path: str, task_id: str) -> Dict:
+    def analyze_video(self, video_path, task_id):
         try:
-            self.reset()
-            if not os.path.exists(video_path):
-                return {"status": "error", "message": f"文件不存在"}
+            log(task_id, f"开始处理，文件：{os.path.basename(video_path)}")
 
+            # 打开视频
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
+                log(task_id, "错误：无法打开视频")
                 return {"status": "error", "message": "无法打开视频"}
 
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            duration = total_frames / fps if fps > 0 else 0
+            log(task_id, f"视频总帧数：{total_frames}")
 
+            # 逐帧处理
             frame_count = 0
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
+
                 frame_count += 1
                 self.smoothness_analyzer.evaluate_frame(frame, time.time())
                 self.gait_face_analyzer.process_frame(frame)
 
-                # 更新进度
-                progress = round(frame_count / total_frames * 100, 1)
-                TASKS[task_id]["progress"] = progress
+                # 每30帧更新进度
+                if frame_count % 30 == 0:
+                    progress = round(frame_count / total_frames * 100, 1)
+                    TASKS[task_id]["progress"] = progress
+                    log(task_id, f"处理进度：{progress}%")
 
             cap.release()
 
-            smoothness_stats = self.smoothness_analyzer.get_final_stats()
-            gait_face_stats = self.gait_face_analyzer.get_final_stats(total_frames, fps)
-            audio_result = {}
-            sensitive_result = {}
+            # 结果
+            smooth = self.smoothness_analyzer.get_final_stats()
+            gait_face = self.gait_face_analyzer.get_final_stats(total_frames, cap.get(cv2.CAP_PROP_FPS))
+            log(task_id, "处理完成！")
 
-            result = {
+            return {
                 "status": "success",
-                "video_info": {
-                    "file_name": os.path.basename(video_path),
-                    "width": width,
-                    "height": height,
-                    "fps": round(fps, 2),
-                    "duration_seconds": round(duration, 2),
-                    "duration_formatted": format_duration(duration)
-                },
-                "smoothness_analysis": smoothness_stats,
-                "gait_analysis": gait_face_stats["gait_analysis"],
-                "face_detection": gait_face_stats["face_detection"],
-                "audio_analysis": audio_result,
-                "sensitive_detection": sensitive_result,
+                "progress": 100,
+                "smoothness": smooth,
+                "face": gait_face["face_detection"]
             }
-            return result
 
         except Exception as e:
+            log(task_id, f"处理失败：{str(e)}")
             return {"status": "error", "message": str(e)}
 
-# ==============================================
-# 接口 1：上传视频并开始分析（异步任务）
-# ==============================================
+# ====================== 全局实例 ======================
+analyzer_app = VideoAnalysisApp()
+
+# ====================== API 接口 ======================
 @app.post("/analyze_video")
-async def analyze_video(
-    file: UploadFile = File(...),
-):
-    # 生成唯一任务ID
-    task_id = str(uuid.uuid4())
+async def analyze_video(file: UploadFile = File(...)):
+    task_id = str(uuid.uuid4())[:8]  # 短ID，方便看日志
+    filename = file.filename
+
+    # 日志
+    log(task_id, f"收到上传文件：{filename}")
+
+    # 初始化任务
     TASKS[task_id] = {
         "status": "running",
-        "progress": 0.0,
+        "progress": 0,
+        "file": filename,
         "result": None
     }
 
-    # 保存临时文件
+    # 保存文件
     ensure_dir("tmp")
-    video_path = f"tmp/{task_id}_{file.filename}"
+    video_path = f"tmp/{task_id}_{filename}"
 
     with open(video_path, "wb") as f:
         f.write(await file.read())
 
-    # 后台线程执行分析（避免超时）
-    def task():
+    log(task_id, "文件保存完成，开始后台处理")
+
+    # 后台处理
+    def run():
         res = analyzer_app.analyze_video(video_path, task_id)
         TASKS[task_id]["result"] = res
         TASKS[task_id]["status"] = "completed"
 
-    threading.Thread(target=task, daemon=True).start()
+    threading.Thread(target=run, daemon=True).start()
+    return {"task_id": task_id, "status": "接收成功，处理中"}
 
-    return {
-        "task_id": task_id,
-        "status": "running",
-        "progress_url": f"/task/{task_id}"
-    }
-
-# ==============================================
-# 接口 2：查询任务进度/结果
-# ==============================================
 @app.get("/task/{task_id}")
-def get_task_status(task_id: str):
+def get_task(task_id: str):
     if task_id not in TASKS:
-        return JSONResponse({"status": "error", "message": "任务不存在"}, 404)
+        return {"status": "error", "msg": "不存在"}
     return TASKS[task_id]
 
-# ==============================================
-# 健康检查（PythonAnywhere 需要）
-# ==============================================
 @app.get("/")
 def home():
-    return {"status": "ok", "message": "视频分析API运行正常"}
+    return {"status": "ok", "msg": "视频分析API运行正常"}
 
-# ==============================================
-# WSGI 入口（PythonAnywhere 必须）
-# ==============================================
-application = app
+# ====================== 启动 ======================
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
