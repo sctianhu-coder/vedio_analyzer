@@ -17,12 +17,14 @@
 **代码结构说明：
 
   ./video_analyzer
-  +----app.py 主入库
+  +----main.py web入口
+  +----app.py 本地住入口
   +----audio_analyzer.py 做声音分析的类
   +----gait_face_analyzer.py 人脸和步态提取的类
   +----sensitive_info_detector.py 敏感词汇提取的类，敏感词里面做了些简单枚举
   +----video_smoothness.py 视频流畅和平滑度检查的类
-  +----tools.py                    # 工具函数（新增）
+  +----tools.py   工具函数（新增）
+  +----static  html页面
 
 ## 系统要求
 - Python 3.12 -代码3.12上运行OK

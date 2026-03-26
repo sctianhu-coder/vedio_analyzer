@@ -313,265 +313,249 @@
     </div>
 
     <script>
-        // API 地址（修改为您的服务器地址）
-        const API_BASE_URL = 'http://120.26.133.12:8000';
+    // API 地址
+    const API_BASE_URL = 'http://120.26.133.12:8000';
 
-        let selectedFile = null;
-        let currentTaskId = null;
-        let pollingInterval = null;
+    let selectedFile = null;
+    let currentTaskId = null;
+    let pollingInterval = null;
 
-        // DOM 元素
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const fileInfo = document.getElementById('fileInfo');
-        const fileName = document.getElementById('fileName');
-        const fileSize = document.getElementById('fileSize');
-        const analyzeBtn = document.getElementById('analyzeBtn');
-        const progressSection = document.getElementById('progressSection');
-        const progressBar = document.getElementById('progressBar');
-        const progressStatus = document.getElementById('progressStatus');
-        const resultSection = document.getElementById('resultSection');
-        const resultContent = document.getElementById('resultContent');
-        const jsonView = document.getElementById('jsonView');
-        const errorMessage = document.getElementById('errorMessage');
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const progressSection = document.getElementById('progressSection');
+    const progressBar = document.getElementById('progressBar');
+    const progressStatus = document.getElementById('progressStatus');
+    const resultSection = document.getElementById('resultSection');
+    const resultContent = document.getElementById('resultContent');
+    const jsonView = document.getElementById('jsonView');
+    const errorMessage = document.getElementById('errorMessage');
 
-        // 上传区域点击事件
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
-        });
+    uploadArea.addEventListener('click', () => {
+        fileInput.click();
+    });
 
-        // 拖拽上传
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
 
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
 
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFileSelect(files[0]);
-            }
-        });
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFileSelect(files[0]);
+        }
+    });
 
-        // 文件选择
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFileSelect(e.target.files[0]);
-            }
-        });
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileSelect(e.target.files[0]);
+        }
+    });
 
-        function handleFileSelect(file) {
-            // 验证文件类型
-            const validTypes = ['video/mp4', 'video/avi', 'video/quicktime', 'video/x-matroska'];
-            if (!validTypes.includes(file.type) && !file.name.match(/\.(mp4|avi|mov|mkv)$/i)) {
-                showError('请选择有效的视频文件 (MP4, AVI, MOV, MKV)');
-                return;
-            }
-
-            // 验证文件大小 (限制 100MB)
-            if (file.size > 100 * 1024 * 1024) {
-                showError('文件过大，请选择小于 100MB 的视频');
-                return;
-            }
-
-            selectedFile = file;
-            fileName.textContent = file.name;
-            fileSize.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
-            fileInfo.classList.add('show');
-            analyzeBtn.disabled = false;
-            hideError();
-
-            // 重置结果
-            resultSection.classList.remove('show');
-            progressSection.classList.remove('show');
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-                pollingInterval = null;
-            }
+    function handleFileSelect(file) {
+        const validTypes = ['video/mp4', 'video/avi', 'video/quicktime', 'video/x-matroska'];
+        if (!validTypes.includes(file.type) && !file.name.match(/\.(mp4|avi|mov|mkv)$/i)) {
+            showError('请选择有效的视频文件 (MP4, AVI, MOV, MKV)');
+            return;
         }
 
-        // 分析按钮点击
-        analyzeBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
+        if (file.size > 100 * 1024 * 1024) {
+            showError('文件过大，请选择小于 100MB 的视频');
+            return;
+        }
 
-            // 重置状态
-            analyzeBtn.disabled = true;
-            progressSection.classList.add('show');
-            resultSection.classList.remove('show');
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
-            progressStatus.textContent = '上传中...';
-            hideError();
+        selectedFile = file;
+        fileName.textContent = file.name;
+        fileSize.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+        fileInfo.classList.add('show');
+        analyzeBtn.disabled = false;
+        hideError();
+        resultSection.classList.remove('show');
+        progressSection.classList.remove('show');
+        if (pollingInterval) clearInterval(pollingInterval);
+    }
 
-            // 上传视频
-            const formData = new FormData();
-            formData.append('file', selectedFile);
+    analyzeBtn.addEventListener('click', async () => {
+        if (!selectedFile) return;
 
+        analyzeBtn.disabled = true;
+        progressSection.classList.add('show');
+        resultSection.classList.remove('show');
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        progressStatus.textContent = '上传中...';
+        hideError();
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/analyze_video`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error(`上传失败: ${response.status}`);
+            const data = await response.json();
+            currentTaskId = data.task_id;
+            progressStatus.textContent = '分析中...';
+            startPolling();
+
+        } catch (error) {
+            console.error('上传错误:', error);
+            showError(`上传失败: ${error.message}`);
+            analyzeBtn.disabled = false;
+            progressSection.classList.remove('show');
+        }
+    });
+
+    function startPolling() {
+        if (pollingInterval) clearInterval(pollingInterval);
+
+        pollingInterval = setInterval(async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/analyze_video`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error(`上传失败: ${response.status}`);
-                }
-
+                const response = await fetch(`${API_BASE_URL}/task/${currentTaskId}`);
                 const data = await response.json();
-                currentTaskId = data.task_id;
-                progressStatus.textContent = '分析中...';
 
-                // 开始轮询任务状态
-                startPolling();
+                if (data.status === 'completed') {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+                    progressStatus.textContent = '分析完成！';
+                    analyzeBtn.disabled = false;
+
+                    // ====================== 修复点 1 ======================
+                    displayResult(data.data);  // 原来是 data.result → 现在改成 data.data
+
+                } else if (data.status === 'error') {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                    showError(data.data?.message || '分析失败');
+                    analyzeBtn.disabled = false;
+                    progressSection.classList.remove('show');
+                } else {
+                    const progress = data.progress || 0;
+                    progressBar.style.width = `${progress}%`;
+                    progressBar.textContent = `${progress}%`;
+                    progressStatus.textContent = `分析中... ${progress}%`;
+                }
 
             } catch (error) {
-                console.error('上传错误:', error);
-                showError(`上传失败: ${error.message}`);
-                analyzeBtn.disabled = false;
-                progressSection.classList.remove('show');
+                console.error('轮询错误:', error);
             }
-        });
+        }, 2000);
+    }
 
-        // 轮询任务状态
-        function startPolling() {
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-            }
+    // ====================== 修复点 2：字段名全部匹配后端 ======================
+    function displayResult(result) {
+        resultSection.classList.add('show');
+        let html = '';
 
-            pollingInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`${API_BASE_URL}/task/${currentTaskId}`);
-                    const data = await response.json();
-
-                    if (data.status === 'completed') {
-                        // 分析完成
-                        clearInterval(pollingInterval);
-                        pollingInterval = null;
-                        progressBar.style.width = '100%';
-                        progressBar.textContent = '100%';
-                        progressStatus.textContent = '分析完成！';
-                        analyzeBtn.disabled = false;
-
-                        // 显示结果
-                        displayResult(data.result);
-
-                    } else if (data.status === 'error') {
-                        // 分析出错
-                        clearInterval(pollingInterval);
-                        pollingInterval = null;
-                        showError(data.result?.message || '分析失败');
-                        analyzeBtn.disabled = false;
-                        progressSection.classList.remove('show');
-
-                    } else {
-                        // 更新进度
-                        const progress = data.progress || 0;
-                        progressBar.style.width = `${progress}%`;
-                        progressBar.textContent = `${progress}%`;
-                        progressStatus.textContent = `分析中... ${progress}%`;
-                    }
-
-                } catch (error) {
-                    console.error('轮询错误:', error);
-                }
-            }, 2000); // 每2秒查询一次
+        if (result.smoothness) {
+            const s = result.smoothness;
+            const scoreClass = s.overall_score >= 75 ? 'success' : s.overall_score >= 60 ? 'warning' : 'danger';
+            html += `
+                <div class="result-item">
+                    <span class="result-label">🎯 视频流畅度</span>
+                    <span class="result-value ${scoreClass}">${s.overall_score}分 (${s.score_level})</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">📈 运动平滑度</span>
+                    <span class="result-value">${s.motion_smoothness.toFixed(1)}%</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">⚠️ 卡顿帧数</span>
+                    <span class="result-value">${s.stutter_frames}</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">❄️ 冻结帧数</span>
+                    <span class="result-value">${s.freeze_frames}</span>
+                </div>
+            `;
         }
 
-        // 显示分析结果
-        function displayResult(result) {
-            resultSection.classList.add('show');
-
-            let html = '';
-
-            // 流畅度
-            if (result.smoothness) {
-                const smoothness = result.smoothness;
-                const scoreClass = smoothness.overall_score >= 75 ? 'success' :
-                                  (smoothness.overall_score >= 60 ? 'warning' : 'danger');
-                html += `
-                    <div class="result-item">
-                        <span class="result-label">🎯 视频流畅度</span>
-                        <span class="result-value ${scoreClass}">${smoothness.overall_score}分 (${smoothness.score_level})</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">📈 运动平滑度</span>
-                        <span class="result-value">${smoothness.motion_smoothness}%</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">⚠️ 卡顿帧数</span>
-                        <span class="result-value">${smoothness.stutter_frames}</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">❄️ 冻结帧数</span>
-                        <span class="result-value">${smoothness.freeze_frames}</span>
-                    </div>
-                `;
-            }
-
-            // 步态分析（如果有）
-            if (result.gait) {
-                const gait = result.gait;
-                const symmetryClass = gait.knee_angles?.symmetry >= 80 ? 'success' :
-                                     (gait.knee_angles?.symmetry >= 60 ? 'warning' : 'danger');
-                html += `
-                    <div class="result-item">
-                        <span class="result-label">🚶 总步数</span>
-                        <span class="result-value">${gait.step_count || 0}</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">📊 步频</span>
-                        <span class="result-value">${gait.cadence || 0} 步/分钟</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">🦵 左膝角度</span>
-                        <span class="result-value">${gait.knee_angles?.left || 0}°</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">🦵 右膝角度</span>
-                        <span class="result-value">${gait.knee_angles?.right || 0}°</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">⚖️ 左右对称性</span>
-                        <span class="result-value ${symmetryClass}">${gait.knee_angles?.symmetry || 0}% (${gait.knee_angles?.symmetry_status || '未知'})</span>
-                    </div>
-                `;
-            }
-
-            // 人脸检测
-            if (result.face) {
-                const faceIcon = result.face.has_face ? '✅' : '❌';
-                html += `
-                    <div class="result-item">
-                        <span class="result-label">👤 人脸检测</span>
-                        <span class="result-value">${faceIcon} ${result.face.has_face ? '检测到人脸' : '未检测到人脸'}</span>
-                    </div>
-                    <div class="result-item">
-                        <span class="result-label">📸 人脸覆盖率</span>
-                        <span class="result-value">${result.face.face_coverage || 0}%</span>
-                    </div>
-                `;
-            }
-
-            resultContent.innerHTML = html;
-
-            // 显示完整 JSON
-            jsonView.textContent = JSON.stringify(result, null, 2);
+        if (result.gait_analysis) {
+            const g = result.gait_analysis;
+            const symmetry = g.knee_angles?.symmetry || 0;
+            const symClass = symmetry >= 80 ? 'success' : symmetry >= 60 ? 'warning' : 'danger';
+            html += `
+                <div class="result-item">
+                    <span class="result-label">🚶 总步数</span>
+                    <span class="result-value">${g.step_count || 0}</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">📊 步频</span>
+                    <span class="result-value">${g.cadence || 0} 步/分钟</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">🦵 左膝角度</span>
+                    <span class="result-value">${g.knee_angles?.left || 0}°</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">🦵 右膝角度</span>
+                    <span class="result-value">${g.knee_angles?.right || 0}°</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">⚖️ 左右对称性</span>
+                    <span class="result-value ${symClass}">${symmetry}%</span>
+                </div>
+            `;
         }
 
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.classList.add('show');
+        if (result.face_detection) {
+            const f = result.face_detection;
+            const faceIcon = f.has_face ? '✅' : '❌';
+            html += `
+                <div class="result-item">
+                    <span class="result-label">👤 人脸检测</span>
+                    <span class="result-value">${faceIcon} ${f.has_face ? '有人脸' : '无人脸'}</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">📸 人脸覆盖率</span>
+                    <span class="result-value">${(f.face_coverage || 0).toFixed(1)}%</span>
+                </div>
+            `;
         }
 
-        function hideError() {
-            errorMessage.classList.remove('show');
+        if (result.audio) {
+            const a = result.audio;
+            const audioIcon = a.has_audio_content ? '✅' : '❌';
+            const voiceIcon = a.has_voice ? '🗣️' : '🔇';
+            html += `
+                <div class="result-item">
+                    <span class="result-label">🔊 音频状态</span>
+                    <span class="result-value">${audioIcon} ${a.has_audio_content ? '有声音' : '无声音'}</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">🗣️ 人声检测</span>
+                    <span class="result-value">${voiceIcon} ${a.has_voice ? '有人声' : '无人声'}</span>
+                </div>
+            `;
         }
-    </script>
+
+        resultContent.innerHTML = html;
+        jsonView.textContent = JSON.stringify(result, null, 2);
+    }
+
+    function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.classList.add('show');
+    }
+
+    function hideError() {
+        errorMessage.classList.remove('show');
+    }
+</script>
 </body>
 </html>
