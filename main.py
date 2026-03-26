@@ -40,7 +40,7 @@ class VideoAnalysisApp:
     def __init__(self):
         self.smoothness_analyzer = VideoSmoothnessAnalyzer()
         self.gait_face_analyzer = GaitFaceAnalyzer()
-        self.audio_analyzer = AudioAnalyzerSimple(ffmpeg_path="/usr/local/bin/ffmpeg")
+        self.audio_analyzer = AudioAnalyzerSimple()
         self.sensitive_detector = SensitiveInfoDetector()
 
     def analyze_video(self, video_path, task_id):

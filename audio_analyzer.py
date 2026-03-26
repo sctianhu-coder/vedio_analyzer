@@ -217,7 +217,7 @@ class AudioAnalyzerSimple:
         Args:
             ffmpeg_path: 可选，留空则自动搜索系统 ffmpeg
         """
-        self.ffmpeg_path = ffmpeg_path
+        self.ffmpeg_path = ffmpeg_path or "ffmpeg"  # <-- 修复点1：默认直接用系统ffmpeg
         self.ffmpeg_available = self._check_ffmpeg()
         self.moviepy_available = self._check_moviepy()
 
@@ -229,36 +229,14 @@ class AudioAnalyzerSimple:
     def _find_ffmpeg(self) -> Optional[str]:
         """自动查找系统可用的 ffmpeg"""
         import shutil
-
-        # 优先直接用系统命令（Ubuntu 环境最佳）
-        found_in_path = shutil.which("ffmpeg")
-        if found_in_path:
-            return found_in_path
-
-        # 备用常见路径
-        possible_paths = [
-            '/usr/local/bin/ffmpeg',
-            '/usr/bin/ffmpeg',
-        ]
-
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-
-        return None
+        found = shutil.which("ffmpeg")
+        return found if found else "ffmpeg"
 
     def _check_ffmpeg(self) -> bool:
         """检查 ffmpeg 是否可用（自动查找）"""
-        # 如果没传路径，自动查找
-        if not self.ffmpeg_path:
-            self.ffmpeg_path = self._find_ffmpeg()
-
-        if not self.ffmpeg_path:
-            return False
-
         try:
             result = subprocess.run(
-                [self.ffmpeg_path, '-version'],
+                ["ffmpeg", "-version"],  # <-- 修复点2：直接调用系统ffmpeg
                 capture_output=True,
                 timeout=5
             )
@@ -274,14 +252,14 @@ class AudioAnalyzerSimple:
             return False
 
     def extract_audio_ffmpeg(self, video_path: str, output_path: str = None) -> Optional[str]:
-        if not self.ffmpeg_available or not self.ffmpeg_path:
+        if not self.ffmpeg_available:
             return None
 
         if output_path is None:
             output_path = tempfile.NamedTemporaryFile(suffix='.wav', delete=False).name
 
         cmd = [
-            self.ffmpeg_path,
+            "ffmpeg",  # <-- 修复点3：直接用系统ffmpeg
             '-i', video_path,
             '-vn',
             '-acodec', 'pcm_s16le',
