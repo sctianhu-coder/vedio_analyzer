@@ -20,14 +20,14 @@ class AudioAnalyzer:
     3. 语音转文字（ASR）
     """
 
-    def __init__(self, use_whisper: bool = True):
+    def __init__(self, use_whisper: bool = False):# 【关键】默认关闭 Whisper！省 500MB+
         """
         初始化音频分析器
 
         Args:
             use_whisper: 是否使用 Whisper 进行语音识别
         """
-        self.use_whisper = use_whisper
+        self.use_whisper = False
         self._init_audio_processing()
 
         self.asr_model = None
@@ -51,41 +51,29 @@ class AudioAnalyzer:
         except ImportError:
             pass
 
+    # 【禁用 Whisper，不加载，省巨大内存】
     def _load_whisper(self):
-        """加载 Whisper 语音识别模型"""
-        try:
-            import whisper
-            self.asr_model = whisper.load_model("base")
-            print("Whisper 语音识别模型已加载")
-        except ImportError:
-            print("警告: openai-whisper 未安装，语音转文字功能不可用")
-            self.use_whisper = False
-        except Exception as e:
-            print(f"Whisper 加载失败: {e}")
-            self.use_whisper = False
+        self.use_whisper = False
+        self.asr_model = None
 
     def extract_audio_from_video(self, video_path: str, output_audio_path: str = None) -> Optional[str]:
         """从视频中提取音频"""
         try:
-            import moviepy.editor as mp
-            video = mp.VideoFileClip(video_path)
-
+            # 【内存优化】ffmpeg 提取，不使用 moviepy（巨占内存）
+            import subprocess
             if output_audio_path is None:
-                output_audio_path = tempfile.NamedTemporaryFile(suffix='.wav', delete=False).name
+                output_audio_path = tempfile.mktemp(suffix=".wav")
 
-            if video.audio is not None:
-                video.audio.write_audiofile(output_audio_path, verbose=False, logger=None)
-                video.close()
-                return output_audio_path
-            else:
-                print("视频没有音频轨道")
-                return None
-        except ImportError:
-            print("警告: moviepy 未安装，无法提取音频")
+            cmd = [
+                "ffmpeg", "-i", video_path,
+                "-vn", "-acodec", "pcm_s16le",
+                "-ar", "16000", "-ac", "1", "-y", output_audio_path
+            ]
+            subprocess.run(cmd, capture_output=True)
+            return output_audio_path if os.path.exists(output_audio_path) else None
+        except:
             return None
-        except Exception as e:
-            print(f"音频提取失败: {e}")
-            return None
+
 
     def detect_audio_presence(self, audio_path: str) -> Dict:
         """检测音频文件中是否有声音"""
@@ -219,7 +207,7 @@ class AudioAnalyzerSimple:
         """
         self.ffmpeg_path = ffmpeg_path or "ffmpeg"  # <-- 修复点1：默认直接用系统ffmpeg
         self.ffmpeg_available = self._check_ffmpeg()
-        self.moviepy_available = self._check_moviepy()
+        self.moviepy_available = False  # 【关键】禁用 moviepy，巨省内存
 
         if self.ffmpeg_available:
             print(f"✅ ffmpeg 自动检测成功: {self.ffmpeg_path}")
@@ -245,11 +233,7 @@ class AudioAnalyzerSimple:
             return False
 
     def _check_moviepy(self) -> bool:
-        try:
-            import moviepy.editor as mp
-            return True
-        except ImportError:
-            return False
+        return False  # 强制关闭
 
     def extract_audio_ffmpeg(self, video_path: str, output_path: str = None) -> Optional[str]:
         if not self.ffmpeg_available:
