@@ -10,6 +10,25 @@ import numpy as np
 from datetime import datetime
 from typing import Any
 
+# 自定义 JSON 编码器函数
+def convert_numpy_types(obj):
+    """递归转换 NumPy 类型为 Python 原生类型"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_numpy_types(item) for item in obj)
+    else:
+        return obj
 
 def convert_to_serializable(obj: Any) -> Any:
     """
