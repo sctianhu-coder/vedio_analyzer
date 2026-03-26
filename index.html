@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>步态分析系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f5f3ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #ede9fe;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .upload-text strong {
+            color: #667eea;
+        }
+
+        .file-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0fdf4;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-name {
+            font-weight: bold;
+            color: #166534;
+            word-break: break-all;
+        }
+
+        .file-size {
+            color: #15803d;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            margin-top: 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-section {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .progress-section.show {
+            display: block;
+        }
+
+        .progress-bar-container {
+            background: #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 30px;
+        }
+
+        .progress-bar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .progress-status {
+            text-align: center;
+            margin-top: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-section.show {
+            display: block;
+        }
+
+        .result-card {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+
+        .result-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #374151;
+            border-left: 4px solid #667eea;
+            padding-left: 12px;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .result-label {
+            color: #6b7280;
+        }
+
+        .result-value {
+            font-weight: bold;
+            color: #374151;
+        }
+
+        .result-value.success {
+            color: #10b981;
+        }
+
+        .result-value.warning {
+            color: #f59e0b;
+        }
+
+        .result-value.danger {
+            color: #ef4444;
+        }
+
+        .json-view {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            font-family: monospace;
+            margin-top: 15px;
+        }
+
+        .error-message {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #9ca3af;
+            font-size: 12px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚶 步态分析系统</h1>
+            <p>上传视频，AI 自动分析步态特征</p>
+        </div>
+
+        <div class="content">
+            <!-- 上传区域 -->
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📹</div>
+                <div class="upload-text">
+                    点击或拖拽视频到此处<br>
+                    <strong>支持格式:</strong> MP4, AVI, MOV, MKV
+                </div>
+                <input type="file" id="fileInput" accept="video/*">
+            </div>
+
+            <!-- 文件信息 -->
+            <div class="file-info" id="fileInfo">
+                <div>📁 已选择: <span class="file-name" id="fileName"></span></div>
+                <div class="file-size" id="fileSize"></div>
+            </div>
+
+            <!-- 分析按钮 -->
+            <button class="btn btn-primary" id="analyzeBtn" disabled>🚀 开始分析</button>
+
+            <!-- 进度条 -->
+            <div class="progress-section" id="progressSection">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar">0%</div>
+                </div>
+                <div class="progress-status" id="progressStatus">等待开始...</div>
+            </div>
+
+            <!-- 错误信息 -->
+            <div class="error-message" id="errorMessage"></div>
+
+            <!-- 结果展示 -->
+            <div class="result-section" id="resultSection">
+                <div class="result-card">
+                    <div class="result-title">📊 分析结果</div>
+                    <div id="resultContent"></div>
+                    <div class="json-view" id="jsonView"></div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            Powered by MediaPipe & OpenCV | 步态分析系统
+        </footer>
+    </div>
+
+    <script>
+        // API 地址（修改为您的服务器地址）
+        const API_BASE_URL = 'http://120.26.133.12:8000';
+
+        let selectedFile = null;
+        let currentTaskId = null;
+        let pollingInterval = null;
+
+        // DOM 元素
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const progressSection = document.getElementById('progressSection');
+        const progressBar = document.getElementById('progressBar');
+        const progressStatus = document.getElementById('progressStatus');
+        const resultSection = document.getElementById('resultSection');
+        const resultContent = document.getElementById('resultContent');
+        const jsonView = document.getElementById('jsonView');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // 上传区域点击事件
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        // 文件选择
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            // 验证文件类型
+            const validTypes = ['video/mp4', 'video/avi', 'video/quicktime', 'video/x-matroska'];
+            if (!validTypes.includes(file.type) && !file.name.match(/\.(mp4|avi|mov|mkv)$/i)) {
+                showError('请选择有效的视频文件 (MP4, AVI, MOV, MKV)');
+                return;
+            }
+
+            // 验证文件大小 (限制 100MB)
+            if (file.size > 100 * 1024 * 1024) {
+                showError('文件过大，请选择小于 100MB 的视频');
+                return;
+            }
+
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            fileInfo.classList.add('show');
+            analyzeBtn.disabled = false;
+            hideError();
+
+            // 重置结果
+            resultSection.classList.remove('show');
+            progressSection.classList.remove('show');
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+
+        // 分析按钮点击
+        analyzeBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            // 重置状态
+            analyzeBtn.disabled = true;
+            progressSection.classList.add('show');
+            resultSection.classList.remove('show');
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            progressStatus.textContent = '上传中...';
+            hideError();
+
+            // 上传视频
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/analyze_video`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`上传失败: ${response.status}`);
+                }
+
+                const data = await response.json();
+                currentTaskId = data.task_id;
+                progressStatus.textContent = '分析中...';
+
+                // 开始轮询任务状态
+                startPolling();
+
+            } catch (error) {
+                console.error('上传错误:', error);
+                showError(`上传失败: ${error.message}`);
+                analyzeBtn.disabled = false;
+                progressSection.classList.remove('show');
+            }
+        });
+
+        // 轮询任务状态
+        function startPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+
+            pollingInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/task/${currentTaskId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'completed') {
+                        // 分析完成
+                        clearInterval(pollingInterval);
+                        pollingInterval = null;
+                        progressBar.style.width = '100%';
+                        progressBar.textContent = '100%';
+                        progressStatus.textContent = '分析完成！';
+                        analyzeBtn.disabled = false;
+
+                        // 显示结果
+                        displayResult(data.result);
+
+                    } else if (data.status === 'error') {
+                        // 分析出错
+                        clearInterval(pollingInterval);
+                        pollingInterval = null;
+                        showError(data.result?.message || '分析失败');
+                        analyzeBtn.disabled = false;
+                        progressSection.classList.remove('show');
+
+                    } else {
+                        // 更新进度
+                        const progress = data.progress || 0;
+                        progressBar.style.width = `${progress}%`;
+                        progressBar.textContent = `${progress}%`;
+                        progressStatus.textContent = `分析中... ${progress}%`;
+                    }
+
+                } catch (error) {
+                    console.error('轮询错误:', error);
+                }
+            }, 2000); // 每2秒查询一次
+        }
+
+        // 显示分析结果
+        function displayResult(result) {
+            resultSection.classList.add('show');
+
+            let html = '';
+
+            // 流畅度
+            if (result.smoothness) {
+                const smoothness = result.smoothness;
+                const scoreClass = smoothness.overall_score >= 75 ? 'success' :
+                                  (smoothness.overall_score >= 60 ? 'warning' : 'danger');
+                html += `
+                    <div class="result-item">
+                        <span class="result-label">🎯 视频流畅度</span>
+                        <span class="result-value ${scoreClass}">${smoothness.overall_score}分 (${smoothness.score_level})</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">📈 运动平滑度</span>
+                        <span class="result-value">${smoothness.motion_smoothness}%</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">⚠️ 卡顿帧数</span>
+                        <span class="result-value">${smoothness.stutter_frames}</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">❄️ 冻结帧数</span>
+                        <span class="result-value">${smoothness.freeze_frames}</span>
+                    </div>
+                `;
+            }
+
+            // 步态分析（如果有）
+            if (result.gait) {
+                const gait = result.gait;
+                const symmetryClass = gait.knee_angles?.symmetry >= 80 ? 'success' :
+                                     (gait.knee_angles?.symmetry >= 60 ? 'warning' : 'danger');
+                html += `
+                    <div class="result-item">
+                        <span class="result-label">🚶 总步数</span>
+                        <span class="result-value">${gait.step_count || 0}</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">📊 步频</span>
+                        <span class="result-value">${gait.cadence || 0} 步/分钟</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">🦵 左膝角度</span>
+                        <span class="result-value">${gait.knee_angles?.left || 0}°</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">🦵 右膝角度</span>
+                        <span class="result-value">${gait.knee_angles?.right || 0}°</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">⚖️ 左右对称性</span>
+                        <span class="result-value ${symmetryClass}">${gait.knee_angles?.symmetry || 0}% (${gait.knee_angles?.symmetry_status || '未知'})</span>
+                    </div>
+                `;
+            }
+
+            // 人脸检测
+            if (result.face) {
+                const faceIcon = result.face.has_face ? '✅' : '❌';
+                html += `
+                    <div class="result-item">
+                        <span class="result-label">👤 人脸检测</span>
+                        <span class="result-value">${faceIcon} ${result.face.has_face ? '检测到人脸' : '未检测到人脸'}</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">📸 人脸覆盖率</span>
+                        <span class="result-value">${result.face.face_coverage || 0}%</span>
+                    </div>
+                `;
+            }
+
+            resultContent.innerHTML = html;
+
+            // 显示完整 JSON
+            jsonView.textContent = JSON.stringify(result, null, 2);
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('show');
+        }
+    </script>
+</body>
+</html>

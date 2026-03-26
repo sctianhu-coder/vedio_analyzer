@@ -29,6 +29,25 @@ from sensitive_info_detector import SensitiveInfoDetector, PrivacyBlur
 TASKS = {}
 app = FastAPI(title="视频分析API", version="simple-log")
 
+app = FastAPI(title="视频分析API", version="simple-log")
+
+# ====================== 添加静态文件服务 ======================
+# 确保 static 目录存在
+os.makedirs("static", exist_ok=True)
+
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def home():
+    """返回前端页面"""
+    try:
+        with open("static/index.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return {"status": "error", "msg": "前端页面未找到，请将 index.html 放入 static 目录"}
+
+
 # ====================== 简单日志工具 ======================
 def log(task_id, msg):
     """统一日志格式：时间 + 任务ID + 信息"""
