@@ -76,6 +76,7 @@ class VideoAnalysisApp:
                 if frame_count % 30 == 0:
                     progress = min(round(frame_count / total_frames * 100, 1), 100)
                     TASKS[task_id]["progress"] = progress
+                    log(task_id, f"处理进度：{progress}%")
 
             cap.release()
 
