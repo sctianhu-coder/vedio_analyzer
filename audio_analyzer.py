@@ -30,7 +30,6 @@ class AudioAnalyzer:
         self.use_whisper = use_whisper
         self._init_audio_processing()
 
-        # 尝试加载语音识别模型
         self.asr_model = None
         if use_whisper:
             self._load_whisper()
@@ -66,9 +65,7 @@ class AudioAnalyzer:
             self.use_whisper = False
 
     def extract_audio_from_video(self, video_path: str, output_audio_path: str = None) -> Optional[str]:
-        """
-        从视频中提取音频（使用 moviepy）
-        """
+        """从视频中提取音频"""
         try:
             import moviepy.editor as mp
             video = mp.VideoFileClip(video_path)
@@ -85,7 +82,6 @@ class AudioAnalyzer:
                 return None
         except ImportError:
             print("警告: moviepy 未安装，无法提取音频")
-            print("安装命令: pip install moviepy")
             return None
         except Exception as e:
             print(f"音频提取失败: {e}")
@@ -212,74 +208,65 @@ class AudioAnalyzer:
 class AudioAnalyzerSimple:
     """
     轻量级音频分析器（使用 ffmpeg 或 moviepy 提取音频）
-    支持外部传入 ffmpeg 路径
+    自动识别系统 ffmpeg，无需手动传入路径
     """
 
     def __init__(self, ffmpeg_path: str = None):
         """
         初始化音频分析器
-
         Args:
-            ffmpeg_path: ffmpeg 可执行文件的完整路径，如果不提供则自动查找
+            ffmpeg_path: 可选，留空则自动搜索系统 ffmpeg
         """
         self.ffmpeg_path = ffmpeg_path
         self.ffmpeg_available = self._check_ffmpeg()
         self.moviepy_available = self._check_moviepy()
 
         if self.ffmpeg_available:
-            print(f"ffmpeg 可用: {self.ffmpeg_path}")
+            print(f"✅ ffmpeg 自动检测成功: {self.ffmpeg_path}")
         else:
-            print("ffmpeg 不可用")
+            print("⚠️ ffmpeg 不可用")
 
     def _find_ffmpeg(self) -> Optional[str]:
-        """自动查找 ffmpeg 路径"""
+        """自动查找系统可用的 ffmpeg"""
         import shutil
 
-        # 常见 ffmpeg 安装路径
+        # 优先直接用系统命令（Ubuntu 环境最佳）
+        found_in_path = shutil.which("ffmpeg")
+        if found_in_path:
+            return found_in_path
+
+        # 备用常见路径
         possible_paths = [
-            'ffmpeg',  # 在 PATH 中
-            '/opt/homebrew/bin/ffmpeg',  # Apple Silicon Mac
-            '/usr/local/bin/ffmpeg',      # Intel Mac
-            '/usr/bin/ffmpeg',             # Linux
-            'C:\\ffmpeg\\bin\\ffmpeg.exe', # Windows
+            '/usr/local/bin/ffmpeg',
+            '/usr/bin/ffmpeg',
         ]
 
         for path in possible_paths:
-            # 检查是否是完整路径
             if os.path.exists(path):
                 return path
-            # 检查是否在 PATH 中
-            found = shutil.which(path)
-            if found:
-                return found
 
         return None
 
     def _check_ffmpeg(self) -> bool:
-        """检查 ffmpeg 是否可用"""
-        # 确定要使用的 ffmpeg 路径
-        ffmpeg_cmd = self.ffmpeg_path if self.ffmpeg_path else self._find_ffmpeg()
+        """检查 ffmpeg 是否可用（自动查找）"""
+        # 如果没传路径，自动查找
+        if not self.ffmpeg_path:
+            self.ffmpeg_path = self._find_ffmpeg()
 
-        if not ffmpeg_cmd:
+        if not self.ffmpeg_path:
             return False
 
         try:
             result = subprocess.run(
-                [ffmpeg_cmd, '-version'],
+                [self.ffmpeg_path, '-version'],
                 capture_output=True,
                 timeout=5
             )
-            if result.returncode == 0:
-                # 更新 ffmpeg_path 为找到的路径
-                self.ffmpeg_path = ffmpeg_cmd
-                return True
+            return result.returncode == 0
         except Exception:
-            pass
-
-        return False
+            return False
 
     def _check_moviepy(self) -> bool:
-        """检查 moviepy 是否可用"""
         try:
             import moviepy.editor as mp
             return True
@@ -287,7 +274,6 @@ class AudioAnalyzerSimple:
             return False
 
     def extract_audio_ffmpeg(self, video_path: str, output_path: str = None) -> Optional[str]:
-        """使用 ffmpeg 直接提取音频"""
         if not self.ffmpeg_available or not self.ffmpeg_path:
             return None
 
@@ -295,7 +281,7 @@ class AudioAnalyzerSimple:
             output_path = tempfile.NamedTemporaryFile(suffix='.wav', delete=False).name
 
         cmd = [
-            self.ffmpeg_path,  # 使用指定的 ffmpeg 路径
+            self.ffmpeg_path,
             '-i', video_path,
             '-vn',
             '-acodec', 'pcm_s16le',
@@ -306,19 +292,14 @@ class AudioAnalyzerSimple:
         ]
 
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=30
-            )
-            if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            if result.returncode == 0 and os.path.getsize(output_path) > 0:
                 return output_path
         except Exception:
             pass
         return None
 
     def extract_audio_moviepy(self, video_path: str, output_path: str = None) -> Optional[str]:
-        """使用 moviepy 提取音频"""
         if not self.moviepy_available:
             return None
 
@@ -328,35 +309,22 @@ class AudioAnalyzerSimple:
         try:
             import moviepy.editor as mp
             video = mp.VideoFileClip(video_path)
-
             if video.audio is None:
                 return None
 
             video.audio.write_audiofile(output_path, verbose=False, logger=None, fps=16000)
             video.close()
-
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                return output_path
+            return output_path if os.path.getsize(output_path) > 0 else None
         except Exception:
-            pass
-        return None
+            return None
 
     def extract_audio(self, video_path: str, output_path: str = None) -> Optional[str]:
-        """尝试多种方法提取音频"""
-        # 优先使用 ffmpeg（更可靠）
-        audio_path = self.extract_audio_ffmpeg(video_path, output_path)
-        if audio_path:
-            return audio_path
-
-        # 备选使用 moviepy
-        audio_path = self.extract_audio_moviepy(video_path, output_path)
-        if audio_path:
-            return audio_path
-
-        return None
+        audio = self.extract_audio_ffmpeg(video_path, output_path)
+        if audio:
+            return audio
+        return self.extract_audio_moviepy(video_path, output_path)
 
     def analyze_video_audio(self, video_path: str) -> dict:
-        """综合分析视频音频"""
         result = {
             "has_audio_stream": False,
             "has_audio_content": False,
@@ -370,29 +338,18 @@ class AudioAnalyzerSimple:
             result["error"] = f"视频文件不存在: {video_path}"
             return result
 
-        # 提取音频
         audio_path = self.extract_audio(video_path)
         if audio_path is None:
             result["error"] = "无法提取音频"
-            if not self.ffmpeg_available and not self.moviepy_available:
-                result["message"] = "请安装 ffmpeg (brew install ffmpeg) 或 moviepy (pip install moviepy)"
-            elif not self.ffmpeg_available:
-                result["message"] = f"ffmpeg 不可用，请指定正确路径或安装 ffmpeg"
-            else:
-                result["message"] = "视频可能没有音频轨道"
+            result["message"] = "请安装 ffmpeg 或 moviepy"
             return result
 
         try:
             import wave
-
             with wave.open(audio_path, 'rb') as wav:
                 frames = wav.getnframes()
                 rate = wav.getframerate()
-
                 data = wav.readframes(frames)
-                if len(data) == 0:
-                    result["message"] = "音频数据为空"
-                    return result
 
                 if wav.getsampwidth() == 2:
                     audio_array = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
@@ -400,7 +357,6 @@ class AudioAnalyzerSimple:
                     audio_array = np.frombuffer(data, dtype=np.uint8).astype(np.float32) / 255.0
 
                 energy = np.mean(audio_array ** 2)
-
                 fft = np.fft.rfft(audio_array)
                 freqs = np.fft.rfftfreq(len(audio_array), 1 / rate)
                 magnitude = np.abs(fft)
@@ -408,7 +364,6 @@ class AudioAnalyzerSimple:
                 voice_band = (freqs >= 85) & (freqs <= 255)
                 voice_energy = np.sum(magnitude[voice_band])
                 total_energy = np.sum(magnitude)
-
                 voice_ratio = voice_energy / (total_energy + 1e-6)
                 has_voice = energy > 0.01 and voice_ratio > 0.3
 
@@ -429,29 +384,16 @@ class AudioAnalyzerSimple:
 
         finally:
             try:
-                if os.path.exists(audio_path):
-                    os.unlink(audio_path)
+                os.unlink(audio_path)
             except:
                 pass
 
         return result
 
     def analyze_audio(self, video_path: str) -> dict:
-        """简化版音频分析（保持向后兼容）"""
         return self.analyze_video_audio(video_path)
 
 
-# 便捷函数
 def quick_audio_check(video_path: str, ffmpeg_path: str = None) -> dict:
-    """
-    快速检查视频是否有声音和人声
-
-    Args:
-        video_path: 视频路径
-        ffmpeg_path: ffmpeg 可执行文件路径（可选）
-
-    Returns:
-        音频分析结果
-    """
     analyzer = AudioAnalyzerSimple(ffmpeg_path=ffmpeg_path)
     return analyzer.analyze_video_audio(video_path)
