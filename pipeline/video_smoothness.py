@@ -38,6 +38,10 @@ class VideoSmoothnessAnalyzer:
         self.prev_gray = None
         self.prev_time = None
 
+        # 新增：帧时间和运动分数记录（用于状态管理）
+        self.frame_times = []
+        self.motion_scores = []
+
         # 是否已重置
         self.is_reset = True
 
@@ -52,7 +56,60 @@ class VideoSmoothnessAnalyzer:
         self.prev_frame = None
         self.prev_gray = None
         self.prev_time = None
+        self.frame_times.clear()
+        self.motion_scores.clear()
         self.is_reset = True
+
+    def get_current_state(self) -> Dict:
+        """获取当前分析器状态（供线程返回）"""
+        return {
+            # 历史数据
+            "frame_diffs": list(self.frame_diffs),
+            "motion_vectors": list(self.motion_vectors),
+            "fps_history": list(self.fps_history),
+            # 统计结果
+            "smoothness_score": self.smoothness_score,
+            "stutter_count": self.stutter_count,
+            "freeze_count": self.freeze_count,
+            # 帧数据（避免直接引用numpy数组）
+            "prev_frame_exists": self.prev_frame is not None,
+            "prev_gray_exists": self.prev_gray is not None,
+            "prev_time": self.prev_time,
+            # 新增的状态变量
+            "frame_times": self.frame_times.copy(),
+            "motion_scores": self.motion_scores.copy(),
+            # 重置状态
+            "is_reset": self.is_reset
+        }
+
+    def merge_state(self, state: Dict):
+        """合并单帧处理后的状态"""
+        # 恢复历史数据队列
+        self.frame_diffs.extend(state.get("frame_diffs", []))
+        self.motion_vectors.extend(state.get("motion_vectors", []))
+        self.fps_history.extend(state.get("fps_history", []))
+
+        # 合并统计结果
+        self.smoothness_score = state.get("smoothness_score", self.smoothness_score)
+        self.stutter_count = state.get("stutter_count", self.stutter_count)
+        self.freeze_count = state.get("freeze_count", self.freeze_count)
+
+        # 恢复时间和分数记录
+        self.frame_times.extend(state.get("frame_times", []))
+        self.motion_scores.extend(state.get("motion_scores", []))
+
+        # 恢复时间戳和重置状态
+        self.prev_time = state.get("prev_time", self.prev_time)
+        self.is_reset = state.get("is_reset", self.is_reset)
+
+        # 注意：numpy数组（prev_frame/prev_gray）不建议跨进程传递，这里只标记存在性
+        # 如果需要完整恢复，建议将数组保存为字节流或文件路径
+        if state.get("prev_frame_exists") and self.prev_frame is None:
+            # 可以在这里从文件/字节流恢复，示例中暂不实现
+            pass
+        if state.get("prev_gray_exists") and self.prev_gray is None:
+            # 可以在这里从文件/字节流恢复，示例中暂不实现
+            pass
 
     def calculate_frame_difference(self, frame: np.ndarray) -> float:
         """
@@ -177,6 +234,9 @@ class VideoSmoothnessAnalyzer:
         self.motion_vectors.append(mean_mag)
         self.prev_gray = gray
 
+        # 记录运动分数（用于状态管理）
+        self.motion_scores.append(smoothness)
+
         return smoothness
 
     def calculate_fps_stability(self, current_time: float) -> float:
@@ -191,13 +251,15 @@ class VideoSmoothnessAnalyzer:
         """
         if self.prev_time is None:
             self.prev_time = current_time
+            self.frame_times.append(current_time)
             return 100.0
 
         # 计算当前帧间隔
         frame_interval = (current_time - self.prev_time) * 1000  # 转换为毫秒
         self.prev_time = current_time
 
-        # 记录FPS
+        # 记录时间戳和FPS
+        self.frame_times.append(current_time)
         current_fps = 1000.0 / frame_interval if frame_interval > 0 else 0
         self.fps_history.append(current_fps)
 

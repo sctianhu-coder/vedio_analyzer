@@ -11,14 +11,13 @@ import logging
 import threading
 from datetime import datetime
 import cv2
-import numpy as np
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 # 导入核心模块
-from core import VideoAnalysisCore
-from tools import ensure_dir
+from output.core import VideoAnalysisCore
+from pipeline.tools import ensure_dir
 
 # 全局配置
 TASKS = {}
