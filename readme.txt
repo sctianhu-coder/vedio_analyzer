@@ -18,7 +18,7 @@
 
   ./video_analyzer
   +----main.py web入口
-  +----app.py 本地住入口
+  +----app.py  本地入口
   +----audio_analyzer.py 做声音分析的类
   +----gait_face_analyzer.py 人脸和步态提取的类
   +----sensitive_info_detector.py 敏感词汇提取的类，敏感词里面做了些简单枚举

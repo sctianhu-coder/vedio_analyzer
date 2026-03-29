@@ -8,6 +8,7 @@
 import os
 import time
 import uuid
+import logging
 import threading
 from datetime import datetime
 import tools
@@ -34,6 +35,23 @@ app = FastAPI(title="视频分析API", version="final")
 # 静态文件
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+# ====================== 全局日志配置（带时间戳） ======================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# 给 uvicorn 日志也加上时间
+uvicorn_log = logging.getLogger("uvicorn")
+uvicorn_log.handlers = []
+uvicorn_log.addHandler(logging.StreamHandler())
+uvicorn_log.setLevel(logging.INFO)
+
+uvicorn_access_log = logging.getLogger("uvicorn.access")
+uvicorn_access_log.handlers = []
+uvicorn_access_log.addHandler(logging.StreamHandler())
+uvicorn_access_log.setLevel(logging.INFO)
 
 # ====================== 日志 ======================
 def log(task_id, msg):
@@ -61,6 +79,23 @@ class VideoAnalysisApp:
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             duration = total_frames / fps if fps > 0 else 0
             log(task_id, f"总帧数：{total_frames}，时长：{duration:.1f}s")
+
+            # ==============================================
+            # ✅ 修复苹果 MOV 帧尺寸突变问题（按第一帧统一大小），所有格式的视频都会变帧的。
+            # ==============================================
+            ret, first_frame = cap.read()
+            if not ret:
+                cap.release()
+                log(task_id, "错误：视频为空")
+                return {"status": "error", "message": "视频为空"}
+
+            # 固定使用第一帧的尺寸
+            FIXED_WIDTH = first_frame.shape[1]
+            FIXED_HEIGHT = first_frame.shape[0]
+            log(task_id, f"✅ 统一帧尺寸：{FIXED_WIDTH}x{FIXED_HEIGHT}")
+
+            # 回到第0帧，开始正式循环
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
             # 逐帧分析
             frame_count = 0
@@ -161,6 +196,52 @@ async def home():
             return HTMLResponse(content=f.read())
     except:
         return {"msg": "视频分析API运行正常", "upload": "/analyze_video", "query": "/task/{task_id}"}
+
+import re
+
+# 恶意路径正则规则（覆盖你日志里的所有攻击）
+MALICIOUS_PATTERNS = [
+    # 路径遍历攻击
+    r"\.\./",
+    r"/etc/(passwd|hosts|shadow)",
+    # 敏感配置文件
+    r"\.env",
+    r"docker-compose\.(yml|yaml)",
+    r"Dockerfile",
+    r"\.git/",
+    r"config\.json",
+    # 敏感脚本/源码文件
+    r"\.(php|py|go|js)$",
+    r"phpinfo\.php",
+    r"test\.php",
+    # 其他恶意特征
+    r"file://",
+    r"META-INF",
+    r"login\.action",
+    r"\.vscode/",
+    r"\.secret",
+    r"claude",
+]
+# 编译正则（提升性能）
+MALICIOUS_REGEX = re.compile("|".join(MALICIOUS_PATTERNS), re.I)
+
+
+# 全局拦截中间件
+@app.middleware("http")
+async def block_malicious_requests(request: Request, call_next):
+    path = request.url.path
+    query = str(request.query_params)
+
+    # 匹配恶意特征 → 直接拒绝
+    if MALICIOUS_REGEX.search(path) or MALICIOUS_REGEX.search(query):
+        return JSONResponse(
+            status_code=403,
+            content={"code": 403, "msg": "Forbidden: Illegal request"}
+        )
+
+    # 正常请求放行
+    response = await call_next(request)
+    return response
 
 # ====================== 启动 ======================
 if __name__ == "__main__":
